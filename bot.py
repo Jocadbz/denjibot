@@ -66,33 +66,6 @@ banned_users = []
 
 
 # Parallel functions
-def recieve_message():
-    # TODO: Not hardcoding this
-    address = ('localhost', 6000)     # family is deduced to be 'AF_INET'
-    listener = multiprocessing.connection.Listener(address, authkey='123') # If hosting this microservice on another location, DO NOT use this key.
-    conn = listener.accept()
-    print('connection accepted from', listener.last_accepted)
-    while True:
-        msg = conn.recv()
-        # This is actually a pretty bad way to do this
-        # I'm not even sure if this will work since I EXPECT
-        # the microservice will send it's message when we are expecting it.
-        if msg is not None:
-            conn.close()
-            return msg
-            break
-    listener.close()
-
-
-def send_request(path_required):
-    address = ('localhost', 6001)
-    conn = multiprocessing.connection.Client(address, authkey='123')
-    conn.send(path_required)
-    conn.close()
-    # now onto recieving the message (I really hope this works.)
-    temp = recieve_message()
-    return temp
-
 
 # Defining our base view
 class BaseView(discord.ui.View):
@@ -582,7 +555,7 @@ async def on_message(message):
         if Path(f"guilds/{message.guild.id}/custom_commands").exists() is False:
             os.makedirs(f"guilds/{message.guild.id}/custom_commands")
         if message.author.id in banned_users:
-            message.channel.send("You are banned.")
+            await message.channel.send("You are banned.")
             return
         with open('config_channels.toml', 'r') as f:
             config = toml.load(f)
