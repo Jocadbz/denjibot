@@ -10,3 +10,7 @@ pyproject.toml
 .idea
 poetry.lock
 rpg/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd

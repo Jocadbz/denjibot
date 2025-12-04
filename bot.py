@@ -170,7 +170,8 @@ def command_used():
     if Path(f"comandos_usados").exists() is False:
         with open(f'comandos_usados', 'w') as f:
             f.write("0")
-    current_xp = int(open(f"comandos_usados", "r+").read())
+    with open(f"comandos_usados", "r") as f:
+        current_xp = int(f.read())
     with open(f'comandos_usados', 'w') as f:
         f.write(str(current_xp + 1))
 
@@ -188,18 +189,20 @@ def dar_conquistas(user_id: int, conquista: str):
 # Define the XP functions we need.
 def increase_xp(user_sent, amount: int, guild: int):
     checkprofile(user_sent)
-    if open(f"profile/{user_sent}/experience-{guild}", "r+").read() == '':
-        with open(f'profile/{user_sent}/experience-{guild}', 'w') as f:
-            f.write("0")
-    current_xp = int(float(open(f"profile/{user_sent}/experience-{guild}", "r+").read()))
-    with open(f'profile/{user_sent}/experience-{guild}', 'w') as f:
+    file_path = f"profile/{user_sent}/experience-{guild}"
+    with open(file_path, "r") as f:
+        content = f.read().strip()
+        current_xp = 0 if content == '' else int(float(content))
+    with open(file_path, 'w') as f:
         f.write(str(current_xp + amount))
 
 
 def decrease_xp(user_sent, amount: int, guild: int):
     checkprofile(user_sent)
-    current_xp = int(float(open(f"profile/{user_sent}/experience-{guild}", "r+").read()))
-    with open(f'profile/{user_sent}/experience-{guild}', 'w') as f:
+    file_path = f"profile/{user_sent}/experience-{guild}"
+    with open(file_path, "r") as f:
+        current_xp = int(float(f.read()))
+    with open(file_path, 'w') as f:
         if current_xp - amount < 0:
             f.write("0")
         else:
@@ -208,21 +211,33 @@ def decrease_xp(user_sent, amount: int, guild: int):
 
 def increase_coins(user_sent, amount: int):
     checkprofile(user_sent)
-    current_xp = int(float(open(f"profile/{user_sent}/coins", "r+").read())) + amount
-    with open(f'profile/{user_sent}/coins', 'w') as f:
+    file_path = f"profile/{user_sent}/coins"
+    with open(file_path, "r") as f:
+        current_xp = int(float(f.read())) + amount
+    with open(file_path, 'w') as f:
         f.write(str(int(current_xp)))
     log_message(f"{user_sent} coins increased to {current_xp}")
 
 
 def decrease_coins(user_sent, amount: int):
     checkprofile(user_sent)
-    current_xp = int(float(open(f"profile/{user_sent}/coins", "r+").read())) - amount
-    with open(f'profile/{user_sent}/coins', 'w') as f:
+    file_path = f"profile/{user_sent}/coins"
+    with open(file_path, "r") as f:
+        current_xp = int(float(f.read())) - amount
+    with open(file_path, 'w') as f:
         if current_xp < 0:
             f.write("0")
         else:
             f.write(str(int(current_xp)))
     log_message(f"{user_sent} coins decreased to {current_xp}")
+
+
+def get_user_coins(user_id):
+    """Helper function to safely read user's coin balance"""
+    checkprofile(user_id)
+    file_path = f"profile/{user_id}/coins"
+    with open(file_path, "r") as f:
+        return int(float(f.read()))
 
 
 # Define function to check for user's folders, pretty useful.
@@ -302,23 +317,28 @@ def rank_command(arg1, multiplier, guild):
     if arg1 == "coins":
         the_ranked_array = []
         profiles = os.listdir("profile")
-        profiles.remove("727194765610713138")
+        try:
+            profiles.remove("727194765610713138")
+        except ValueError:
+            pass
         for profile in profiles:
-            if bot.get_user(int(profile)) is None:
-                pass
-            else:
-                checkprofile(profile)
-                coins = open(f"profile/{profile}/coins", "r+").read()
-                the_ranked_array.append({'name': f'{bot.get_user(int(profile))}', 'coins': int(float(coins))})
+            user = bot.get_user(int(profile))
+            if user is None:
+                continue
+            checkprofile(profile)
+            with open(f"profile/{profile}/coins", "r") as f:
+                coins = int(float(f.read()))
+            the_ranked_array.append({'name': str(user), 'coins': coins})
         newlist = sorted(the_ranked_array, key=lambda d: d['coins'], reverse=True)
-        the_array_to_send = []
-        the_actual_array = []
         backslash = '\n'
         val = 5 * multiplier
-        for idx, thing in enumerate(newlist):
-            the_array_to_send.append(f"{idx+1} - {thing['name'].split('#')[0]}: P£ {humanize.intcomma(thing['coins'])}")
-        for i in range(val, val + 5):
-            the_actual_array.append(the_array_to_send[i])
+        start_idx = val
+        end_idx = val + 5
+        # Only build the strings we need
+        the_actual_array = []
+        for idx in range(start_idx, min(end_idx, len(newlist))):
+            thing = newlist[idx]
+            the_actual_array.append(f"{idx+1} - {thing['name'].split('#')[0]}: P£ {humanize.intcomma(thing['coins'])}")
         thing = f"""
 {backslash.join(the_actual_array)}
 """
@@ -326,25 +346,26 @@ def rank_command(arg1, multiplier, guild):
         the_ranked_array = []
         profiles = os.listdir("profile")
         for profile in profiles:
-            if bot.get_user(int(profile)) is None:
-                pass
-            else:
-                checkprofile(profile)
-                if Path(f"profile/{profile}/experience-{guild}").exists() is False:
-                    pass
-                else:
-                    checkprofile(profile)
-                    coins = open(f"profile/{profile}/experience-{guild}", "r+").read()
-                    the_ranked_array.append({'name': f'{bot.get_user(int(profile))}', 'coins': int(coins)})
+            user = bot.get_user(int(profile))
+            if user is None:
+                continue
+            checkprofile(profile)
+            xp_file = f"profile/{profile}/experience-{guild}"
+            if not Path(xp_file).exists():
+                continue
+            with open(xp_file, "r") as f:
+                coins = int(f.read())
+            the_ranked_array.append({'name': str(user), 'coins': coins})
         newlist = sorted(the_ranked_array, key=lambda d: d['coins'], reverse=True)
-        the_array_to_send = []
-        the_actual_array = []
         backslash = '\n'
         val = 5 * multiplier
-        for idx, thing in enumerate(newlist):
-            the_array_to_send.append(f"{idx+1} - {thing['name'].split('#')[0]}: {humanize.intcomma(thing['coins'])} XP")
-        for i in range(val, val + 5):
-            the_actual_array.append(the_array_to_send[i])
+        start_idx = val
+        end_idx = val + 5
+        # Only build the strings we need
+        the_actual_array = []
+        for idx in range(start_idx, min(end_idx, len(newlist))):
+            thing = newlist[idx]
+            the_actual_array.append(f"{idx+1} - {thing['name'].split('#')[0]}: {humanize.intcomma(thing['coins'])} XP")
 
         thing = f"""
 {backslash.join(the_actual_array)}
@@ -353,25 +374,26 @@ def rank_command(arg1, multiplier, guild):
         the_ranked_array = []
         profiles = os.listdir("profile")
         for profile in profiles:
-            if bot.get_user(int(profile)) is None:
-                pass
-            else:
-                checkprofile(profile)
-                if Path(f"profile/{profile}/duelos_vencidos").exists() is False:
-                    pass
-                else:
-                    checkprofile(profile)
-                    coins = open(f"profile/{profile}/duelos_vencidos", "r+").read()
-                    the_ranked_array.append({'name': f'{bot.get_user(int(profile))}', 'duelos': int(coins)})
+            user = bot.get_user(int(profile))
+            if user is None:
+                continue
+            checkprofile(profile)
+            duelos_file = f"profile/{profile}/duelos_vencidos"
+            if not Path(duelos_file).exists():
+                continue
+            with open(duelos_file, "r") as f:
+                coins = int(f.read())
+            the_ranked_array.append({'name': str(user), 'duelos': coins})
         newlist = sorted(the_ranked_array, key=lambda d: d['duelos'], reverse=True)
-        the_array_to_send = []
-        the_actual_array = []
         backslash = '\n'
         val = 5 * multiplier
-        for idx, thing in enumerate(newlist):
-            the_array_to_send.append(f"{idx+1} - {thing['name'].split('#')[0]}: {humanize.intcomma(thing['duelos'])} Duelos vencidos")
-        for i in range(val, val + 5):
-            the_actual_array.append(the_array_to_send[i])
+        start_idx = val
+        end_idx = val + 5
+        # Only build the strings we need
+        the_actual_array = []
+        for idx in range(start_idx, min(end_idx, len(newlist))):
+            thing = newlist[idx]
+            the_actual_array.append(f"{idx+1} - {thing['name'].split('#')[0]}: {humanize.intcomma(thing['duelos'])} Duelos vencidos")
 
         thing = f"""
 {backslash.join(the_actual_array)}
@@ -386,13 +408,17 @@ def create_commands_folder():
 
 def increase_punheta(user_sent, amount: int):
     checkprofile(user_sent)
-    current_xp = int(open(f"profile/{user_sent}/punhetas", "r+").read())
-    with open(f'profile/{user_sent}/punhetas', 'w') as f:
+    file_path = f"profile/{user_sent}/punhetas"
+    with open(file_path, "r") as f:
+        current_xp = int(f.read())
+    with open(file_path, 'w') as f:
         f.write(str(current_xp + amount))
 
 
 def log_message(content):
-    webhook = discord.SyncWebhook.from_url(open(f"log_url", "r+").read())
+    with open("log_url", "r") as f:
+        webhook_url = f.read().strip()
+    webhook = discord.SyncWebhook.from_url(webhook_url)
     webhook.send(content)
 
 
@@ -416,11 +442,13 @@ async def checkpremium():
         for profile in profiles:
             checkonlyjack(profile)
             for item in os.listdir(f"profile/{profile}/onlyjack/subto/"):
-                newdate1 = dateutil.parser.parse(open(f"profile/{profile}/onlyjack/subto/{item}/date", 'r+'))
+                with open(f"profile/{profile}/onlyjack/subto/{item}/date", 'r') as f:
+                    newdate1 = dateutil.parser.parse(f.read())
                 diff = newdate1 - datetime.datetime.now()
                 if diff.days >= 30:
                     shutil.rmtree(f"profile/{profile}/onlyjack/subto/{item}")
-                    current_subs = int(open(f"profile/{item}/onlyjack/subs", "r+").read())
+                    with open(f"profile/{item}/onlyjack/subs", "r") as f:
+                        current_subs = int(f.read())
                     with open(f'profile/{item}/onlyjack/subs', 'w') as f:
                         f.write(str(current_subs - 1))
             if Path(f"profile/{profile}/premium").exists() is False:
@@ -430,7 +458,8 @@ async def checkpremium():
                     bought_two.append(bot.get_user(int(profile)))
                 if bot.get_user(int(profile)) not in bought_four:
                     bought_four.append(bot.get_user(int(profile)))
-                newdate1 = dateutil.parser.parse(open(f"profile/{profile}/premium/date", 'r+'))
+                with open(f"profile/{profile}/premium/date", 'r') as f:
+                    newdate1 = dateutil.parser.parse(f.read())
                 if newdate1 + relativedelta(days=7) <= datetime.datetime.now():
                     shutil.rmtree(f"profile/{profile}/premium")
                     bought_two.remove(bot.get_user(int(profile)))
@@ -485,7 +514,9 @@ async def daily_bank_tax():
 @bot.event
 async def on_ready():
     print(f'Logged on as {bot.user}!')
-    await bot.change_presence(activity=discord.CustomActivity(name=f"{open(f'custom_status', 'r+').read()} | d$help", emoji='👀'))
+    with open('custom_status', 'r') as f:
+        status = f.read().strip()
+    await bot.change_presence(activity=discord.CustomActivity(name=f"{status} | d$help", emoji='👀'))
     if 'rpg' in bot.extensions:
         # Extension is already loaded, do nothing
         pass
@@ -505,7 +536,8 @@ def setup_experience(message):
         with open(f'profile/{message.author.id}/experience-{message.guild.id}', 'w') as f:
             f.write("0")
     if Path(f"profile/{message.author.id}/level-{message.guild.id}").exists() is False:
-        experienceweird = open(f'profile/{message.author.id}/experience-{message.guild.id}', 'r+').read()
+        with open(f'profile/{message.author.id}/experience-{message.guild.id}', 'r') as f:
+            experienceweird = f.read()
         experienceweird = experienceweird[:-3]
         with open(f'profile/{message.author.id}/level-{message.guild.id}', 'w') as f:
             if experienceweird == '':
@@ -571,8 +603,10 @@ async def on_message(message):
             else:
                 msg_xp = 2
             increase_xp(message.author.id, msg_xp, message.guild.id)
-            experience_old = open(f'profile/{message.author.id}/level-{message.guild.id}', 'r+').read()
-            experience_new = open(f'profile/{message.author.id}/experience-{message.guild.id}', 'r+').read()
+            with open(f'profile/{message.author.id}/level-{message.guild.id}', 'r') as f:
+                experience_old = f.read()
+            with open(f'profile/{message.author.id}/experience-{message.guild.id}', 'r') as f:
+                experience_new = f.read()
             experience_new = experience_new[:-3]
             if experience_new == '':
                 pass
@@ -588,18 +622,22 @@ async def on_message(message):
                     else:
                         for channel in channels["channel"]:
                             channel_to_send = bot.get_channel(channel)
-                            thing = open(f'guilds/{message.guild.id}/lvup_message', "r+").read().replace("{{user}}", f"{message.author.mention}")
+                            with open(f'guilds/{message.guild.id}/lvup_message', "r") as f:
+                                thing = f.read().replace("{{user}}", f"{message.author.mention}")
                             await channel_to_send.send(thing.replace("{{level}}", f"{experience_new}"))
 
             create_commands_folder()
             commands = os.listdir(f"guilds/{message.guild.id}/custom_commands")
             command = message.content.lower().replace("d$", "")
             if message.content.lower().replace("d$", "") in commands:
-                if open(f"guilds/{message.guild.id}/custom_commands/{command.lower()}", "r+").read() == "":
+                command_file = f"guilds/{message.guild.id}/custom_commands/{command.lower()}"
+                with open(command_file, "r") as f:
+                    command_content = f.read()
+                if command_content == "":
                     await message.channel.send("Pedimos desculpas, mas este comando é inválido e será deletado agora. Agradecemos pela paciência.")
-                    os.remove(f"guilds/{message.guild.id}/custom_commands/{command.lower()}")
+                    os.remove(command_file)
                 else:
-                    await message.channel.send(open(f"guilds/{message.guild.id}/custom_commands/{command.lower()}", "r+").read())
+                    await message.channel.send(command_content)
                     command_used()
             else:
                 await bot.process_commands(message)
@@ -628,8 +666,10 @@ async def on_message(message):
         else:
             msg_xp = 2
         increase_xp(message.author.id, msg_xp, message.guild.id)
-        experience_old = open(f'profile/{message.author.id}/level-{message.guild.id}', 'r+').read()
-        experience_new = open(f'profile/{message.author.id}/experience-{message.guild.id}', 'r+').read()
+        with open(f'profile/{message.author.id}/level-{message.guild.id}', 'r') as f:
+            experience_old = f.read()
+        with open(f'profile/{message.author.id}/experience-{message.guild.id}', 'r') as f:
+            experience_new = f.read()
         experience_new = experience_new[:-3]
         if experience_new == '':
             pass
@@ -643,7 +683,8 @@ async def on_message(message):
                 else:
                     for channel in channels["channel"]:
                         channel_to_send = bot.get_channel(channel)
-                        thing = open(f'guilds/{message.guild.id}/lvup_message', "r+").read().replace("{{user}}", f"{message.author.mention}")
+                        with open(f'guilds/{message.guild.id}/lvup_message', "r") as f:
+                            thing = f.read().replace("{{user}}", f"{message.author.mention}")
                         await channel_to_send.send(thing.replace("{{level}}", f"{experience_new}"))
                 with open(f'profile/{message.author.id}/level-{message.guild.id}', 'w') as f:
                     f.write(experience_new)
@@ -677,7 +718,9 @@ async def on_command_error(ctx, error):
         traceback_str = ''.join(traceback.format_exception(type(error), error, error.__traceback__))
         embed.description = '```py\n%s\n```' % traceback_str
         embed.timestamp = datetime.datetime.now()
-        webhook = discord.SyncWebhook.from_url(open(f"webhook_url", "r+").read())
+        with open("webhook_url", "r") as f:
+            webhook_url = f.read().strip()
+        webhook = discord.SyncWebhook.from_url(webhook_url)
         if len(embed.description) > 4096:
             print(embed.description)
         else:
@@ -690,7 +733,9 @@ async def on_error(event, *args, **kwargs):
     embed.add_field(name='Event', value=event)
     embed.description = '```py\n%s\n```' % traceback.format_exc()
     embed.timestamp = datetime.datetime.now()
-    webhook = discord.SyncWebhook.from_url(open(f"webhook_url", "r+").read())
+    with open("webhook_url", "r") as f:
+        webhook_url = f.read().strip()
+    webhook = discord.SyncWebhook.from_url(webhook_url)
     webhook.send(embed=embed)
 
 
@@ -714,7 +759,9 @@ async def on_member_join(member):
         for channel in channels["channels"]:
             channel_to_send = bot.get_channel(channel)
             try:
-                await channel_to_send.send(open(f"guilds/{member.guild.id}/welcome_message", "r+").read().replace("{{user}}", f"{member.mention}"))
+                with open(f"guilds/{member.guild.id}/welcome_message", "r") as f:
+                    welcome_msg = f.read().replace("{{user}}", f"{member.mention}")
+                await channel_to_send.send(welcome_msg)
             except Exception:
                 print("We can't put this shit up, no perms. Bailing out.")
 
@@ -808,8 +855,7 @@ class LevelModal(BaseModal, title="Mensagem de LevelUp"):
         await interaction.response.defer()
         with open(f'guilds/{interaction.guild_id}/lvup_message', 'w') as f:
             f.write(self.tag_content.value)
-        message = open(f"guilds/{interaction.guild_id}/lvup_message", "r+").read().replace("{{user}}", "{usuário mencionado}")
-        message = message.replace("{{level}}", "{nível}")
+        message = self.tag_content.value.replace("{{user}}", "{usuário mencionado}").replace("{{level}}", "{nível}")
         await interaction.followup.send(f"Sua mensagem foi registrada! ela vai ficar assim:\n\n{message}", ephemeral=True)
         await super().on_submit(interaction)
 
@@ -870,7 +916,9 @@ async def say(ctx, channel, arg):
 @commands.cooldown(1, cooldown_command, commands.BucketType.user)
 async def updatestatus(ctx):
     if ctx.author.id == 727194765610713138:
-        await bot.change_presence(activity=discord.CustomActivity(name=f"{open(f'custom_status', 'r+').read()} | d$help", emoji='👀'))
+        with open('custom_status', 'r') as f:
+            status = f.read().strip()
+        await bot.change_presence(activity=discord.CustomActivity(name=f"{status} | d$help", emoji='👀'))
     else:
         await ctx.send("Esse comando não existe. Desculpe!")
 
@@ -1066,7 +1114,7 @@ class TagModal(BaseModal, title="Mensagem de boas vindas"):
         await interaction.response.defer()
         with open(f'guilds/{interaction.guild_id}/welcome_message', 'w') as f:
             f.write(self.tag_content.value)
-        message = open(f"guilds/{interaction.guild_id}/welcome_message", "r+").read().replace("{{user}}", "{usuário mencionado}")
+        message = self.tag_content.value.replace("{{user}}", "{usuário mencionado}")
         await interaction.followup.send(f"Sua mensagem foi registrada! ela vai ficar assim:\n\n{message}", ephemeral=True)
         await super().on_submit(interaction)
 
@@ -1115,7 +1163,9 @@ async def sobre(ctx):
     embed = discord.Embed(title=f'{bot_name}', colour=0x00b0f4)
     embed.set_thumbnail(url=bot.user.display_avatar)
     embed.add_field(name="Tempo Ligado:", value=uptime(), inline=True)
-    embed.add_field(name="Comandos Usados:", value=open(f"comandos_usados", "r+").read(), inline=True)
+    with open("comandos_usados", "r") as f:
+        commands_used = f.read()
+    embed.add_field(name="Comandos Usados:", value=commands_used, inline=True)
     embed.add_field(name="Perfis disponíveis:", value=f"{len(list)} perfis", inline=False)
     embed.set_footer(text=f"Feito por Jocadbz - v{version}",
                      icon_url=the_user.display_avatar)
@@ -1442,8 +1492,8 @@ async def lojinha(ctx, arg1: Item | None = None):
     arg1 = arg1 or None
     checkprofile(ctx.author.id)
     if arg1 == "1":
-        current_coins = open(f"profile/{ctx.author.id}/coins", "r+").read()
-        if int(float(current_coins)) >= price_1:
+        current_coins = get_user_coins(ctx.author.id)
+        if current_coins >= price_1:
             decrease_coins(ctx.author.id, price_1)
 
             await ctx.send("Você comprou o benefício 1.")
@@ -1454,8 +1504,8 @@ async def lojinha(ctx, arg1: Item | None = None):
 
             await ctx.send(f"A-Ah, m-mais que twiste!!11 você não tem {coin_name} o suficiente. *looks at you* (Dica UWU: d$comprar)")
     elif arg1 == "2":
-        current_coins = open(f"profile/{ctx.author.id}/coins", "r+").read()
-        if int(float(current_coins)) >= price_2:
+        current_coins = get_user_coins(ctx.author.id)
+        if current_coins >= price_2:
 
             await ctx.send("Você comprou o benefício 2. Primeiramente, responda a essa mensagem com o nome do comando. (Exemplo, se você colocar 'example', seu comando vai ser 'cd$example')")
 
@@ -1507,8 +1557,8 @@ async def lojinha(ctx, arg1: Item | None = None):
             await ctx.send(f"Ah mais que triste. Você não tem {coin_name} o suficiente. (Dica: d$comprar)")
 
     elif arg1 == "3":
-        current_coins = open(f"profile/{ctx.author.id}/coins", "r+").read()
-        if int(float(current_coins)) >= price_3:
+        current_coins = get_user_coins(ctx.author.id)
+        if current_coins >= price_3:
             decrease_coins(ctx.author.id, price_3)
 
             await ctx.send("Você comprou o benefício 3.")
@@ -1558,8 +1608,7 @@ async def investir(ctx, arg1: int) -> None:
         await ctx.send("Você não pode investir valores menores ou iguais a zero.")
         return
 
-    if arg1 > int(float(open(f"profile/{ctx.author.id}/coins", "r+").read())):
-
+    if arg1 > get_user_coins(ctx.author.id):
         await ctx.reply("Você não tem fundos o suficiente pra investir. (Dica: d$comprar)")
     else:
         if resultado == "win":
@@ -1607,8 +1656,7 @@ async def doar(ctx, amount: int, user: discord.Member):
         await ctx.send("Tem certeza de que esse user existe?")
     else:
         checkprofile(user.id)
-        if amount > int(open(f"profile/{ctx.author.id}/coins", "r+").read()):
-
+        if amount > get_user_coins(ctx.author.id):
             await ctx.send("Você não tem fundos o suficiente pra completar essa transação. (Dica: d$comprar)")
         else:
             if amount < 0:
@@ -1641,12 +1689,12 @@ async def adivinhar(ctx, amount: int, number: int):
         return
     possibilities = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     checkprofile(ctx.author.id)
-    if amount == int(open(f"profile/{ctx.author.id}/coins", "r+").read()):
+    user_coins = get_user_coins(ctx.author.id)
+    if amount == user_coins:
         if Path(f"profile/{ctx.author.id}/conquistas/conquista1.toml").exists() is False:
             dar_conquistas(ctx.author.id, "1")
             await ctx.send("**Conquista obtida:** *Eu confio na sorte!*")
-    if amount > int(open(f"profile/{ctx.author.id}/coins", "r+").read()):
-
+    if amount > user_coins:
         await ctx.reply("Me parece que você não pode cobrir essa aposta... (Dica: d$comprar)")
         if amount < 0:
             await ctx.send("Você não pode apostar um valor negativo ou igual a zero.")
@@ -1672,11 +1720,12 @@ async def aposta(ctx, amount: int, user: discord.Member):
 
         await ctx.send("Opaaa pera lá, você já apostou. Espere o cooldown acabar. (Dica: Você pode pular esse cooldown comprando o benefício 2 na d$lojinha)")
     else:
-        if amount == int(open(f"profile/{ctx.author.id}/coins", "r+").read()):
+        user_coins = get_user_coins(ctx.author.id)
+        if amount == user_coins:
             if Path(f"profile/{ctx.author.id}/conquistas/conquista1.toml").exists() is False:
                 dar_conquistas(ctx.author.id, "1")
                 await ctx.send("**Conquista obtida:** *Eu confio na sorte!*")
-        if amount > int(open(f"profile/{ctx.author.id}/coins", "r+").read()):
+        if amount > user_coins:
             await ctx.send("Você não tem fundos o suficiente pra apostar. (Dica: d$comprar)")
             return
         if amount < 0:
@@ -1688,8 +1737,7 @@ async def aposta(ctx, amount: int, user: discord.Member):
                 await ctx.send("Você não pode apostar com você mesmo.")
             else:
                 checkprofile(user.id)
-                if amount > int(open(f"profile/{user.id}/coins", "r+").read()):
-
+                if amount > get_user_coins(user.id):
                     await ctx.send("Me parece que seu oponente não pode cobrir essa aposta... (Dica: d$comprar)")
                 else:
 
@@ -2881,4 +2929,6 @@ async def work(ctx):
 
 # bot.remove_command('help')
 
-bot.run(open(sys.argv[1], "r+").read(), log_level=logging.INFO)
+with open(sys.argv[1], "r") as f:
+    bot_token = f.read().strip()
+bot.run(bot_token, log_level=logging.INFO)

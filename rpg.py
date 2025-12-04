@@ -90,8 +90,10 @@ class BaseView(discord.ui.View):
 
 def decrease_coins(user_sent, amount: int):
     checkprofile(user_sent)
-    current_xp = int(float(open(f"profile/{user_sent}/coins", "r+").read())) - amount
-    with open(f'profile/{user_sent}/coins', 'w') as f:
+    file_path = f"profile/{user_sent}/coins"
+    with open(file_path, "r") as f:
+        current_xp = int(float(f.read())) - amount
+    with open(file_path, 'w') as f:
         if current_xp < 0:
             f.write("0")
         else:
@@ -535,13 +537,15 @@ class SuperCog(commands.Cog):
                     for armor in dungeon_idk['dungeon']['real_armor_loot']:
                         add_armor(armor, ctx.author.id)
 
-                current_xp = int(float(open(f"profile/{user_sent}/rpg/xp", "r+").read()))
-                did_we_lv_up = calculate_level_up(current_xp, xp_gained, int(float(open(f"profile/{user_sent}/rpg/lv", "r+").read())))
+                with open(f"profile/{user_sent}/rpg/xp", "r") as f:
+                    current_xp = int(float(f.read()))
+                with open(f"profile/{user_sent}/rpg/lv", "r") as f:
+                    current_lv = int(float(f.read()))
+                did_we_lv_up = calculate_level_up(current_xp, xp_gained, current_lv)
                 with open(f'profile/{user_sent}/rpg/xp', 'w') as f:
                     f.write(str(current_xp + xp_gained))
                 results_text.append(f"XP ganho: {xp_gained}")
                 if did_we_lv_up is True:
-                    current_lv = int(float(open(f"profile/{user_sent}/rpg/lv", "r+").read()))
                     with open(f'profile/{user_sent}/rpg/lv', 'w') as f:
                         f.write(str(current_lv + 1))
                     results_text.append(f"Novo rank da DHA!: {current_lv + 1}")
@@ -549,7 +553,8 @@ class SuperCog(commands.Cog):
                     results_text.append(f"Armas ganhas: {' - '.join(dungeon_idk['dungeon']['fake_weapon_loot'])}")
                     results_text.append(f"Armaduras ganhas: {' - '.join(dungeon_idk['dungeon']['fake_armor_loot'])}")
 
-                current_mission = int(float(open(f"profile/{user_sent}/rpg/missions_count", "r+").read()))
+                with open(f"profile/{user_sent}/rpg/missions_count", "r") as f:
+                    current_mission = int(float(f.read()))
                 with open(f'profile/{user_sent}/rpg/missions_count', 'w') as f:
                     f.write(str(current_mission + 1))
 
