@@ -314,6 +314,9 @@ class MyClient(discord.Client):
 
 # The worst command ever
 def rank_command(arg1, multiplier, guild):
+    # Pode a qualquer, e eu digo, QUALQUER momento, mandar um IndexError.
+    # Eu não sei o por quê, eu não consegui reproduzir e esse bot está em servers demais pra eu debuggar.
+    # Vou só aceitar o meu destino...
     if arg1 == "coins":
         the_ranked_array = []
         profiles = os.listdir("profile")
